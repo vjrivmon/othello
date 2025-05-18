@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,6 +23,9 @@ public class Controller : MonoBehaviour
     public Material whiteMaterial;
     public Material tileMaterial;
     public Material tileSelectableMaterial;
+
+    // Variable para el retardo del movimiento de la IA (en segundos)
+    public float aiMoveDelay = 1.5f; 
 
     //Otras variables
     GameObject[] tileGameObjects = new GameObject[Constants.NumTiles];
@@ -231,27 +234,100 @@ public class Controller : MonoBehaviour
 
     public void NextTurn()
     {
-
-        if (turn == 1)
+        if (turn == 1) // Turno de Negras (Player 1)
         {
             if (Constants.Player1.Equals("AI"))
             {
-                int tile=player1.GetComponent<Player>().SelectTile(board);
-                ClickOnTile(tile);
+                StartCoroutine(ProcessAIMove(player1));
             }
+            // Si Player1 es humano, no hace nada aquí; espera el clic en ClickOnTile.
         }
-
-        else
+        else // Turno de Blancas (Player 2)
         {
             if (Constants.Player2.Equals("AI"))
-            {                               
-                int tile = player2.GetComponent<Player>().SelectTile(board);
-                ClickOnTile(tile);
+            {
+                StartCoroutine(ProcessAIMove(player2));
             }
-             
+            // Si Player2 es humano, no hace nada aquí; espera el clic en ClickOnTile.
         }
+    }
 
+    /// <summary>
+    /// Corutina para procesar el movimiento de la IA con un retardo.
+    /// </summary>
+    /// <param name="aiPlayerObject">El GameObject del jugador IA.</param>
+    IEnumerator ProcessAIMove(GameObject aiPlayerObject)
+    {
+        // Mostrar algún mensaje o indicador de que la IA está "pensando" es opcional,
+        // ya que el propio cálculo de Minimax en Player.cs puede llevar tiempo.
+        // finalMessage.text = "IA está pensando..."; // Ejemplo
 
+        // Obtener el movimiento de la IA.
+        // Esta llamada puede tardar si la profundidad de Minimax es alta.
+        int tile = aiPlayerObject.GetComponent<Player>().SelectTile(board);
+
+        if (tile != -1)
+        {
+            // Mensaje opcional indicando que la IA ha decidido y va a esperar.
+            // finalMessage.text = "IA ha decidido. Aplicando movimiento en " + aiMoveDelay + "s...";
+            Debug.Log("IA (" + aiPlayerObject.name + ") ha decidido mover a " + tile + ". Aplicando en " + aiMoveDelay + "s.");
+
+            // Esperar el tiempo definido antes de aplicar el movimiento.
+            yield return new WaitForSeconds(aiMoveDelay);
+
+            // Aplicar el movimiento.
+            ClickOnTile(tile);
+        }
+        else
+        {
+            // Si la IA no puede mover (SelectTile devolvió -1), esto ya se maneja
+            // dentro de ClickOnTile o la lógica de cambio de turno que sigue a la ausencia de selectableTiles.
+            // Sin embargo, es bueno registrarlo.
+            Debug.Log("IA (" + aiPlayerObject.name + ") no tiene movimientos válidos (paso gestionado por la lógica de turnos).");
+            // La lógica de pase ya está en ClickOnTile cuando selectableTiles.Count == 0 después de un turno.
+            // Aquí simplemente no llamamos a ClickOnTile si tile es -1.
+            // El flujo para manejar un "paso" de la IA si no hay movimientos
+            // se gestiona a través de la secuencia:
+            // 1. IA devuelve -1 (o un movimiento válido).
+            // 2. Si el movimiento es válido, se llama ClickOnTile(tile).
+            // 3. ClickOnTile actualiza el tablero, luego llama a DrawSelectableTiles para el *siguiente* jugador.
+            // 4. Si para el siguiente jugador selectableTiles.Count == 0, se activa la lógica de pase (StartCoroutine("Wait2")).
+            // Por lo tanto, si la IA (SelectTile) devuelve -1, y nosotros *no* llamamos a ClickOnTile,
+            // el estado de "no hay movimientos para el siguiente" no se evaluará correctamente.
+            // La IA debería *siempre* devolver un movimiento válido si hay alguno.
+            // Si SelectTile devuelve -1, significa que la IA (según su propia lógica) no encontró movimientos.
+            // Esto se manejaría en la parte de ClickOnTile que gestiona cuando no hay selectableTiles.
+            // Para evitar problemas, si la IA devuelve -1, podríamos forzar la lógica de pase.
+            // Pero es mejor que la lógica de pase en ClickOnTile maneje esto globalmente.
+            // La IA en Player.cs ya devuelve -1 si no hay movimientos.
+            // Aquí, si tile es -1, no llamamos a ClickOnTile. El juego esperará la interacción del
+            // jugador humano o la siguiente llamada a NextTurn si es IA vs IA.
+            // Esto requiere que la lógica de pase después de DrawSelectableTiles se active.
+
+            // Si la IA no tiene movimientos (tile == -1), llamamos directamente a la lógica de fin de turno sin acción.
+             turn = -turn; // Cambiar turno manualmente.
+             finalMessage.text = (turn == Constants.Black ? "Blancas" : "Negras") + " no puede mover. Pasa."; // Indicar el pase.
+             DrawSelectableTiles(); // Ver si el siguiente jugador puede mover.
+             if (selectableTiles.Count == 0) // Si el siguiente tampoco puede
+             {
+                 if (this.turn == Constants.Black) passBlack = true; else passWhite = true;
+                 if (passBlack && passWhite) {
+                     finalMessage.text = "End Game!! Ambos pasan.";
+                     int res=GetWinner(boardManager.CountPieces(board, Constants.Black), boardManager.CountPieces(board, Constants.White));
+                     EndGame(res);
+                 } else {
+                     // No iniciar Wait2 aquí, sino llamar a NextTurn para que el otro jugador (posiblemente otra IA) tenga su oportunidad
+                     // o para que el flujo continúe.
+                     // La corrutina Wait2 se usa para el mensaje "Pass!!" y luego cambia el turno.
+                     // Aquí, ya hemos cambiado el turno.
+                     NextTurn(); // Dejar que el siguiente jugador actúe o que la lógica de juego continúe.
+                 }
+             }
+             else
+             {
+                 NextTurn(); // El siguiente jugador tiene movimientos.
+             }
+        }
     }
 
     int GetWinner(int blackPieces, int whitePieces)
