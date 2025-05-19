@@ -344,12 +344,19 @@ public class Player : MonoBehaviour
 
     private double HeuristicEvaluation(Tile[] board, int aiPlayerColor)
     {
-        // Pesos para los diferentes componentes de la heurística. Estos pueden ser ajustados (tuneados).
-        double w_pieceDiff = 1.0;       // Peso para la diferencia de piezas.
-        double w_cornerControl = 25.0;  // Peso para el control de esquinas.
-        double w_mobility = 5.0;        // Peso para la movilidad.
-        double w_xSquares = -12.0;      // Penalización por X-squares peligrosas.
-        double w_cSquares = -8.0;       // Penalización por C-squares peligrosas.
+        // Pesos base (pueden considerarse como default o para fases no cubiertas explícitamente si se desea)
+        double base_w_pieceDiff = 1.0;
+        double base_w_cornerControl = 25.0; // El control de esquinas es consistentemente alto
+        double base_w_mobility = 5.0;
+        double base_w_xSquares = -12.0;     // Penalización estándar por X-squares
+        double base_w_cSquares = -8.0;      // Penalización estándar por C-squares
+
+        // Variables para los pesos que se usarán, inicializadas con los valores base.
+        double current_w_pieceDiff = base_w_pieceDiff;
+        double current_w_cornerControl = base_w_cornerControl;
+        double current_w_mobility = base_w_mobility;
+        double current_w_xSquares = base_w_xSquares;
+        double current_w_cSquares = base_w_cSquares;
 
         int aiPieces = 0;
         int opponentPieces = 0;
@@ -371,67 +378,98 @@ public class Player : MonoBehaviour
             }
         }
 
-        // 1. Diferencia de Piezas (Piece Difference)
-        double pieceDiffScore = w_pieceDiff * (aiPieces - opponentPieces);
+        // 1. Diferencia de Piezas (Piece Difference) - Se calculará después de determinar la fase del juego
+        // double pieceDiffScore = current_w_pieceDiff * (aiPieces - opponentPieces); 
 
-        // 2. Control de Esquinas (Corner Control)
+        // 2. Control de Esquinas (Corner Control) - Generalmente importante en todas las fases
         double cornerScore = 0;
         int[] corners = {0, 7, 56, 63}; // Índices de las 4 esquinas.
         foreach (int cornerPos in corners) {
             if (board[cornerPos].value == aiPlayerColor) {
-                cornerScore += w_cornerControl;
+                cornerScore += current_w_cornerControl; // Usar peso actual (aunque para esquinas suele ser fijo)
             } else if (board[cornerPos].value == -aiPlayerColor) {
-                cornerScore -= w_cornerControl;
+                cornerScore -= current_w_cornerControl;
             }
         }
 
-        // 3. Movilidad (Mobility)
-        // La movilidad se refiere al número de movimientos válidos.
+        // 3. Movilidad (Mobility) - Se calculará después de determinar la fase del juego
         List<int> aiMoves = boardManager.FindSelectableTiles(board, aiPlayerColor);
         List<int> opponentMoves = boardManager.FindSelectableTiles(board, -aiPlayerColor);
-        double mobilityScore = 0;
-        if (aiMoves.Count + opponentMoves.Count != 0) // Evitar división por cero si nadie puede mover (fin de juego)
-        {
-            // Una forma de calcular la movilidad relativa.
-            mobilityScore = w_mobility * (aiMoves.Count - opponentMoves.Count);
-        } else { // Si es fin de juego por no haber movimientos, la diferencia de piezas es lo único que importa (o casi).
-             if (aiPieces > opponentPieces) return 10000; // Victoria clara
-             if (opponentPieces > aiPieces) return -10000; // Derrota clara
-             return 0; // Empate
+        // double mobilityScore = 0; 
+
+        // Determinar la fase del juego y ajustar pesos dinámicamente
+        int numTotalPieces = aiPieces + opponentPieces;
+
+        // Fase Temprana (Early Game: < 20-22 piezas en total)
+        // Prioridad: movilidad, desarrollo seguro, evitar errores posicionales graves.
+        if (numTotalPieces < 22) { 
+            current_w_pieceDiff = 0.25;      // Poca importancia a la cuenta de piezas.
+            current_w_mobility = 7.5;       // Máxima importancia a la movilidad y opciones.
+            current_w_cornerControl = 30.0; // Asegurar/evitar control de esquinas es vital desde el inicio.
+            current_w_xSquares = -15.0;     // Muy conservador con X-squares.
+            current_w_cSquares = -10.0;     // Muy conservador con C-squares.
+        }
+        // Fase Media (Mid Game: 22 a 48-50 piezas en total)
+        // Agresividad Calculada: Buscar ventajas materiales sin comprometer excesivamente la posición.
+        // Empezar a presionar al oponente.
+        else if (numTotalPieces < 50) { 
+            current_w_pieceDiff = 2.5;      // Aumenta significativamente la búsqueda de ventaja material.
+            current_w_mobility = 4.0;       // Movilidad sigue siendo importante, pero se puede sacrificar por buenas ganancias.
+            current_w_cornerControl = 25.0; // Las esquinas siguen siendo clave.
+            current_w_xSquares = -10.0;     // Aún cauteloso, pero menos que en early game si hay un plan.
+            current_w_cSquares = -7.0;
+        }
+        // Fase Final (Late Game: > 50 piezas en total)
+        // Agresividad Total para Maximizar Piezas: La cuenta de piezas es el rey.
+        else { 
+            current_w_pieceDiff = 10.0;     // ¡Cada pieza cuenta muchísimo! Agresividad máxima en capturas.
+            current_w_mobility = 0.5;       // Movilidad casi irrelevante, excepto para permitir la última captura.
+            current_w_cornerControl = 15.0; // El valor de esquinas futuras es menor si el juego termina ya.
+                                            // Las ya tomadas contribuyen a pieceDiff.
+            current_w_xSquares = -2.0;      // Penalizaciones muy bajas, si tomar una X/C-square da más piezas, se hace.
+            current_w_cSquares = -1.0;
         }
 
+        // Ahora calcular los scores con los pesos ajustados por la fase del juego:
+        double pieceDiffScore = current_w_pieceDiff * (aiPieces - opponentPieces);
+        
+        double mobilityScore = 0;
+        if (aiMoves.Count + opponentMoves.Count != 0) 
+        {
+            mobilityScore = current_w_mobility * (aiMoves.Count - opponentMoves.Count);
+        } else { 
+             if (aiPieces > opponentPieces) return 10000 + (aiPieces - opponentPieces); // Ajustado para incluir diferencia
+             if (opponentPieces > aiPieces) return -10000 - (opponentPieces - aiPieces);
+             return 0; 
+        }
 
         // 4. Penalización por Casillas Peligrosas (X-squares y C-squares)
-        // X-squares son las casillas adyacentes en diagonal a una esquina.
-        // C-squares son las casillas adyacentes ortogonalmente a una esquina.
-        // Jugar en estas casillas es malo si la esquina correspondiente está vacía,
-        // ya que facilita al oponente tomar la esquina.
         double stabilityScore = 0; // Incluye penalizaciones por X/C squares
         
         // Definiciones de X-squares y C-squares relativas a cada esquina
         // Esquina 0 (superior izquierda)
         if (board[0].value == Constants.Empty) {
-            if (board[1].value == aiPlayerColor) stabilityScore += w_cSquares; // C-square
-            if (board[8].value == aiPlayerColor) stabilityScore += w_cSquares; // C-square
-            if (board[9].value == aiPlayerColor) stabilityScore += w_xSquares; // X-square
+            if (board[1].value == aiPlayerColor) stabilityScore += current_w_cSquares; // Usar peso actual
+            if (board[8].value == aiPlayerColor) stabilityScore += current_w_cSquares; // Usar peso actual
+            if (board[9].value == aiPlayerColor) stabilityScore += current_w_xSquares; // Usar peso actual
         }
         // Esquina 7 (superior derecha)
         if (board[7].value == Constants.Empty) {
-            if (board[6].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[15].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[14].value == aiPlayerColor) stabilityScore += w_xSquares;
+            if (board[6].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[15].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[14].value == aiPlayerColor) stabilityScore += current_w_xSquares;
         }
         // Esquina 56 (inferior izquierda)
         if (board[56].value == Constants.Empty) {
-            if (board[48].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[57].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[49].value == aiPlayerColor) stabilityScore += w_xSquares;
+            if (board[48].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[57].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[49].value == aiPlayerColor) stabilityScore += current_w_xSquares;
         }
         // Esquina 63 (inferior derecha)
         if (board[63].value == Constants.Empty) {
-            if (board[55].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[62].value == aiPlayerColor) stabilityScore += w_cSquares;
-            if (board[54].value == aiPlayerColor) stabilityScore += w_xSquares;
+            if (board[55].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[62].value == aiPlayerColor) stabilityScore += current_w_cSquares;
+            if (board[54].value == aiPlayerColor) stabilityScore += current_w_xSquares;
         }
         
         // (Opcional) 5. Piezas de Frontera (Frontier Discs)
@@ -450,21 +488,7 @@ public class Player : MonoBehaviour
             return 0; // Empate
         }
 
-        int numTotalPieces = aiPieces + opponentPieces;
-        if (numTotalPieces < 20) { // Early game
-            double current_w_pieceDiff = 0.5; // Menos importancia a las piezas
-            double current_w_mobility = 7.0;  // Más importancia a la movilidad
-            // Y luego usas current_w_pieceDiff y current_w_mobility en tus cálculos.
-        } else if (numTotalPieces < 50) { // Mid game
-            double current_w_pieceDiff = 1.0;
-            double current_w_mobility = 5.0;
-        } else { // Late game
-            double current_w_pieceDiff = 2.0;  // Mucha importancia a las piezas
-            double current_w_mobility = 3.0;
-        }
-        // Y luego usas current_w_pieceDiff y current_w_mobility en tus cálculos.
-
-        return totalUtility;
+        return totalUtility; 
     }
 
     // Nueva función auxiliar para HeuristicEvaluation
