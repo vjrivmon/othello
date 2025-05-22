@@ -264,7 +264,7 @@ public class Controller : MonoBehaviour
 
         // Obtener el movimiento de la IA.
         // Esta llamada puede tardar si la profundidad de Minimax es alta.
-        int tile = aiPlayerObject.GetComponent<Player>().SelectTile(board);
+        int tile = aiPlayerObject.GetComponent<PlayerVicenteRivasMonferrer>().SelectTile(board);
 
         if (tile != -1)
         {

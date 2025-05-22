@@ -2,17 +2,17 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Node
+public class NodeVicenteRivasMonferrer
 {
     // board: Una copia del estado del tablero de juego para este nodo particular.
     // Se utiliza para simular movimientos y evaluar diferentes escenarios.
     public Tile[] board = new Tile[Constants.NumTiles];
 
     // parent: Referencia al nodo padre en el árbol Minimax. Útil para reconstruir la ruta o para ciertas lógicas de poda.
-    public Node parent;
+    public NodeVicenteRivasMonferrer parent;
 
     // childList: Lista de nodos hijos. Cada hijo representa un posible estado del juego resultante de un movimiento.
-    public List<Node> childList = new List<Node>();
+    public List<NodeVicenteRivasMonferrer> childList = new List<NodeVicenteRivasMonferrer>();
 
     // type: Indica si el nodo es de tipo MAX (0) o MIN (1).
     // Un nodo MAX intentará maximizar la utilidad (turno de la IA).
@@ -44,7 +44,7 @@ public class Node
     // Parámetros:
     //   tiles: El estado del tablero (array de Tile) a copiar para este nodo.
     //   nodeType: El tipo del nodo (NODETYPE_MAX o NODETYPE_MIN).
-    public Node(Tile[] tiles, int nodeType)
+    public NodeVicenteRivasMonferrer(Tile[] tiles, int nodeType)
     {
         // Realiza una copia profunda del tablero para evitar modificaciones no deseadas
         // en el estado del tablero de nodos ancestros o hermanos.
@@ -67,7 +67,7 @@ public class Node
 }
 
 // Definiciones para los tipos de nodos Minimax, locales a esta clase ya que no podemos modificar Constants.cs
-public class Player : MonoBehaviour
+public class PlayerVicenteRivasMonferrer : MonoBehaviour
 {
     // Constantes para definir el tipo de nodo en el algoritmo Minimax.
     private const int NODETYPE_MAX = 0; // Representa un nodo donde la IA (jugador actual) intenta maximizar la puntuación.
@@ -117,7 +117,7 @@ public class Player : MonoBehaviour
 
         // Crea el nodo raíz del árbol Minimax. Este nodo representa el estado actual del juego.
         // Es un nodo de tipo MAX porque la IA (este jugador) busca maximizar su utilidad.
-        Node rootNode = new Node(currentBoardState, NODETYPE_MAX);
+        NodeVicenteRivasMonferrer rootNode = new NodeVicenteRivasMonferrer(currentBoardState, NODETYPE_MAX);
         
         // Inicia la ejecución del algoritmo Minimax de forma recursiva con Poda Alfa-Beta.
         // La función MinimaxRecursive explorará el árbol de juego desde rootNode,
@@ -147,7 +147,7 @@ public class Player : MonoBehaviour
         {
             // Itera sobre cada nodo hijo del nodo raíz. Cada hijo representa un posible primer movimiento de la IA.
             // El objetivo es encontrar el hijo (y por lo tanto, el movimiento) que tenga la mayor utilidad.
-            foreach (Node child in rootNode.childList)
+            foreach (NodeVicenteRivasMonferrer child in rootNode.childList)
             {
                 // La utilidad de 'child' (child.utility) fue calculada por la llamada recursiva de Minimax.
                 // Estos nodos hijos de la raíz son nodos MIN (si depth > 0 en la llamada recursiva que los creó),
@@ -202,7 +202,7 @@ public class Player : MonoBehaviour
     //   beta: El mejor valor (mínimo) encontrado hasta ahora para el jugador MIN en la ruta actual.
     // Retorna:
     //   La utilidad calculada para el 'node' dado.
-    private double MinimaxRecursive(Node node, int depth, int playerColor, double alfa, double beta)
+    private double MinimaxRecursive(NodeVicenteRivasMonferrer node, int depth, int playerColor, double alfa, double beta)
     {
         // --- Recorrido del Árbol y Condiciones de Terminación ---
         // Condición de terminación 1: Se ha alcanzado la profundidad máxima de búsqueda (MINIMAX_DEPTH).
@@ -235,7 +235,7 @@ public class Player : MonoBehaviour
                 // Se crea un nodo hijo que representa esta situación. El tipo de este nodo hijo será el opuesto
                 // al del nodo actual ('node.type'), porque el turno cambia de jugador.
                 // La profundidad aumenta, y la llamada recursiva se hace para 'opponentColor', pasando alfa y beta.
-                Node childPassNode = new Node(node.board, (node.type == NODETYPE_MAX ? NODETYPE_MIN : NODETYPE_MAX));
+                NodeVicenteRivasMonferrer childPassNode = new NodeVicenteRivasMonferrer(node.board, (node.type == NODETYPE_MAX ? NODETYPE_MIN : NODETYPE_MAX));
                 childPassNode.parent = node;
                 node.childList.Add(childPassNode);
 
@@ -262,7 +262,7 @@ public class Player : MonoBehaviour
             foreach (int move in possibleMoves)
             {
                 Tile[] nextBoardState = CreateNextBoardState(node.board, move, playerColor);
-                Node childNode = new Node(nextBoardState, NODETYPE_MIN); 
+                NodeVicenteRivasMonferrer childNode = new NodeVicenteRivasMonferrer(nextBoardState, NODETYPE_MIN); 
                 childNode.parent = node;
                 childNode.moveIndex = move;
                 node.childList.Add(childNode);
@@ -291,7 +291,7 @@ public class Player : MonoBehaviour
             foreach (int move in possibleMoves)
             {
                 Tile[] nextBoardState = CreateNextBoardState(node.board, move, playerColor);
-                Node childNode = new Node(nextBoardState, NODETYPE_MAX); 
+                NodeVicenteRivasMonferrer childNode = new NodeVicenteRivasMonferrer(nextBoardState, NODETYPE_MAX); 
                 childNode.parent = node;
                 childNode.moveIndex = move;
                 node.childList.Add(childNode);
